@@ -158,6 +158,10 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
   end
 
   def get_network_ports
+    network_port_dto = NetworkPort::DtoCollection.new(:child_collections => [:cloud_subnet_network_ports],
+                                                      :relations =>         [:security_groups])
+
+    network_port_dto.process_collection(network_ports) { |n| parse_network_port(n) }
     process_collection(network_ports, :network_ports) { |n| parse_network_port(n) }
   end
 
@@ -423,6 +427,10 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
     security_groups            = network_port.groups.blank? ? [] : network_port.groups.map do |x|
       @data_index.fetch_path(:security_groups, x.group_id)
     end
+
+    dto[self.class.security_group_type::DtoCollection].fetch_patch(x.group_id)
+
+    [dto1, dto5, dto7]
 
     new_result = {
       :type                       => self.class.network_port_type,
