@@ -10,6 +10,14 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
     @data       = {}
     @data_index = {}
     @options    = options || {}
+    initialize_dto_collections
+  end
+
+  def initialize_dto_collections
+    @data[:cloud_subnet_network_ports] = CloudSubnetNetworkPort::DtoCollection.new
+    @data[:network_ports] = ManageIQ::Providers::Amazon::NetworkManager::NetworkPort::DtoCollection.new
+    @data[:cloud_subnets] = ManageIQ::Providers::Amazon::NetworkManager::CloudSubnet::DtoCollection.new
+    @data[:cloud_networks] = ManageIQ::Providers::Amazon::NetworkManager::CloudNetwork::DtoCollection.new
   end
 
   def ems_inv_to_hashes
@@ -18,15 +26,15 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
     $aws_log.info("#{log_header}...")
     # The order of the below methods does matter, because there are inner dependencies of the data!
     get_cloud_networks
-    get_security_groups
+    # get_security_groups
     get_network_ports
-    get_load_balancers
-    get_load_balancer_pools
-    get_load_balancer_listeners
-    get_load_balancer_health_checks
-    get_ec2_floating_ips_and_ports
-    get_floating_ips
-    get_public_ips
+    # get_load_balancers
+    # get_load_balancer_pools
+    # get_load_balancer_listeners
+    # get_load_balancer_health_checks
+    # get_ec2_floating_ips_and_ports
+    # get_floating_ips
+    # get_public_ips
     $aws_log.info("#{log_header}...Complete")
 
     @data
@@ -58,11 +66,11 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
 
   def get_cloud_networks
     vpcs = @aws_ec2.client.describe_vpcs[:vpcs]
-    process_collection(vpcs, :cloud_networks) { |vpc| parse_cloud_network(vpc) }
+    process_dto_collection(vpcs, :cloud_networks) { |vpc| parse_cloud_network(vpc) }
   end
 
-  def get_cloud_subnets(subnets)
-    process_collection(subnets, :cloud_subnets) { |s| parse_cloud_subnet(s) }
+  def get_cloud_subnets(uid, subnets)
+    process_dto_collection(subnets, :cloud_subnets) { |s| parse_cloud_subnet(s, uid) }
   end
 
   def get_security_groups
@@ -157,12 +165,18 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
     process_collection(public_ips, :floating_ips) { |public_ip| parse_public_ip(public_ip) }
   end
 
-  def get_network_ports
-    network_port_dto = NetworkPort::DtoCollection.new(:child_collections => [:cloud_subnet_network_ports],
-                                                      :relations =>         [:security_groups])
+  def process_dto_collection(collection, key)
+    collection.each do |item|
+      uid, new_result = yield(item)
+      next if uid.nil?
 
-    network_port_dto.process_collection(network_ports) { |n| parse_network_port(n) }
-    process_collection(network_ports, :network_ports) { |n| parse_network_port(n) }
+      dto = @data[key].new_dto(new_result)
+      @data[key] << dto
+    end
+  end
+
+  def get_network_ports
+    process_dto_collection(network_ports, :network_ports) { |n| parse_network_port(n) }
   end
 
   def get_ec2_floating_ips_and_ports
@@ -180,8 +194,7 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
     status  = (vpc.state == :available) ? "active" : "inactive"
 
     subnets = @aws_ec2.client.describe_subnets(:filters => [{:name => "vpc-id", :values => [vpc.vpc_id]}])[:subnets]
-    get_cloud_subnets(subnets)
-    cloud_subnets = subnets.collect { |s| @data_index.fetch_path(:cloud_subnets, s.subnet_id) }
+    get_cloud_subnets(uid, subnets)
 
     new_result = {
       :type                => self.class.cloud_network_type,
@@ -192,12 +205,12 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
       :enabled             => true,
       :orchestration_stack => parent_manager_fetch_path(:orchestration_stacks,
                                                         get_from_tags(vpc, "aws:cloudformation:stack-id")),
-      :cloud_subnets       => cloud_subnets,
+      # :cloud_subnets       => cloud_subnets,
     }
     return uid, new_result
   end
 
-  def parse_cloud_subnet(subnet)
+  def parse_cloud_subnet(subnet, cloud_network_uid)
     uid    = subnet.subnet_id
 
     name   = get_from_tags(subnet, :name)
@@ -209,7 +222,8 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
       :name              => name,
       :cidr              => subnet.cidr_block,
       :status            => subnet.state.try(:to_s),
-      :availability_zone => parent_manager_fetch_path(:availability_zones, subnet.availability_zone)
+      :availability_zone => parent_manager_fetch_path(:availability_zones, subnet.availability_zone),
+      :cloud_network     => @data[:cloud_networks].lazy_find(cloud_network_uid),
     }
 
     return uid, new_result
@@ -408,11 +422,14 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
     return uid, new_result
   end
 
-  def parse_cloud_subnet_network_port(cloud_subnet_network_port, subnet_id)
-    {
+  def parse_cloud_subnet_network_port(network_port_id, subnet_id, cloud_subnet_network_port)
+    hash = {
       :address      => cloud_subnet_network_port.private_ip_address,
-      :cloud_subnet => @data_index.fetch_path(:cloud_subnets, subnet_id)
+      # :cloud_subnet => @data_index.fetch_path(:cloud_subnets, subnet_id)
+      :cloud_subnet => @data[:cloud_subnets].lazy_find(subnet_id),
+      :network_port => @data[:network_ports].lazy_find(network_port_id)
     }
+    @data[:cloud_subnet_network_port].new_dto(hash)
   end
 
   def parse_network_port(network_port)
@@ -420,17 +437,17 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
     # TODO(lsmola) AWS can have secondary private IP address assigned to the ENI, our current model does not allow that.
     # Probably the best fix is, to expand unique index of the cloud_subnet_network_ports to include address. Also we
     # need to expand our tests to include the secondary fixed IP. Then we can remove the .slice(0..0)
-    cloud_subnet_network_ports = network_port.private_ip_addresses.slice(0..0).map do |x|
-      parse_cloud_subnet_network_port(x, network_port.subnet_id)
+    network_port.private_ip_addresses.slice(0..0).map do |x|
+      @data[:cloud_subnet_network_ports] << parse_cloud_subnet_network_port(uid, network_port.subnet_id, x)
     end
+    # dto.cloud_subnet_network_ports = @data[:cloud_subnet_network_ports].lazy_find(dto)
+    # cloud_subnet_network_ports = CloudSubnetNetworkPort::DtoCollection.new
     device                     = parent_manager_fetch_path(:vms, network_port.try(:attachment).try(:instance_id))
-    security_groups            = network_port.groups.blank? ? [] : network_port.groups.map do |x|
-      @data_index.fetch_path(:security_groups, x.group_id)
-    end
+    # security_groups            = network_port.groups.blank? ? [] : network_port.groups.map do |x|
+    #   @data_index.fetch_path(:security_groups, x.group_id)
+    # end
 
-    dto[self.class.security_group_type::DtoCollection].fetch_patch(x.group_id)
-
-    [dto1, dto5, dto7]
+    # dto[self.class.security_group_type::DtoCollection].fetch_patch(x.group_id)
 
     new_result = {
       :type                       => self.class.network_port_type,
@@ -441,8 +458,8 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
       :device_owner               => network_port.try(:attachment).try(:instance_owner_id),
       :device_ref                 => network_port.try(:attachment).try(:instance_id),
       :device                     => device,
-      :cloud_subnet_network_ports => cloud_subnet_network_ports,
-      :security_groups            => security_groups,
+      # :cloud_subnet_network_ports => cloud_subnet_network_ports,
+      # :security_groups            => security_groups,
     }
     return uid, new_result
   end
