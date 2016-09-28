@@ -26,15 +26,15 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
     $aws_log.info("#{log_header}...")
     # The order of the below methods does matter, because there are inner dependencies of the data!
     get_cloud_networks
-    # get_security_groups
+    get_security_groups
     get_network_ports
-    # get_load_balancers
-    # get_load_balancer_pools
-    # get_load_balancer_listeners
-    # get_load_balancer_health_checks
-    # get_ec2_floating_ips_and_ports
-    # get_floating_ips
-    # get_public_ips
+    get_load_balancers
+    get_load_balancer_pools
+    get_load_balancer_listeners
+    get_load_balancer_health_checks
+    get_ec2_floating_ips_and_ports
+    get_floating_ips
+    get_public_ips
     $aws_log.info("#{log_header}...Complete")
 
     @data
@@ -61,7 +61,7 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
   end
 
   def network_ports
-    @network_ports ||= @aws_ec2.client.describe_network_interfaces.network_interfaces
+    p @network_ports ||= @aws_ec2.client.describe_network_interfaces.network_interfaces
   end
 
   def get_cloud_networks
@@ -181,7 +181,7 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
 
   def get_ec2_floating_ips_and_ports
     instances = @aws_ec2.instances.select { |instance| instance.network_interfaces.blank? }
-    process_collection(instances, :network_ports) { |instance| parse_network_port_inferred_from_instance(instance) }
+    # process_collection(instances, :network_ports) { |instance| parse_network_port_inferred_from_instance(instance) }
     process_collection(instances, :floating_ips) { |instance| parse_floating_ip_inferred_from_instance(instance) }
   end
 
@@ -429,7 +429,7 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
       :cloud_subnet => @data[:cloud_subnets].lazy_find(subnet_id),
       :network_port => @data[:network_ports].lazy_find(network_port_id)
     }
-    @data[:cloud_subnet_network_port].new_dto(hash)
+    @data[:cloud_subnet_network_ports].new_dto(hash)
   end
 
   def parse_network_port(network_port)
@@ -466,7 +466,7 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
 
   def parse_network_port_inferred_from_instance(instance)
     # Create network_port placeholder for old EC2 instances, those do not have interface nor subnet nor VPC
-    cloud_subnet_network_ports = [parse_cloud_subnet_network_port(instance, nil)]
+    # cloud_subnet_network_ports = [parse_cloud_subnet_network_port(instance, nil)]
 
     uid    = instance.id
     name   = get_from_tags(instance, :name)
@@ -483,7 +483,7 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
       :device_owner               => nil,
       :device_ref                 => nil,
       :device                     => device,
-      :cloud_subnet_network_ports => cloud_subnet_network_ports,
+      # :cloud_subnet_network_ports => cloud_subnet_network_ports,
       :security_groups            => instance.security_groups.to_a.collect do |sg|
         @data_index.fetch_path(:security_groups, sg.group_id)
       end.compact,
