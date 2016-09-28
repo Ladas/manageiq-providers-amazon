@@ -158,11 +158,18 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
   end
 
   def get_network_ports
-    network_port_dto = NetworkPort::DtoCollection.new(:child_collections => [:cloud_subnet_network_ports],
-                                                      :relations =>         [:security_groups])
-
-    network_port_dto.process_collection(network_ports) { |n| parse_network_port(n) }
-    process_collection(network_ports, :network_ports) { |n| parse_network_port(n) }
+    # network_port_dto = NetworkPort::DtoCollection.new(:child_collections => [:cloud_subnet_network_ports],
+    #                                                   :relations =>         [:security_groups])
+    #
+    # network_port_dto.process_collection(network_ports) { |n| parse_network_port(n) }
+    # process_collection(network_ports, :network_ports) { |n| parse_network_port(n) }
+    collection = ManageIQ::Providers::Amazon::NetworkManager::NetworkPort::DtoCollection.new
+    network_ports.each do |network_port|
+      id, hash = parse_network_port(network_port)
+      dto = ManageIQ::Providers::Amazon::NetworkManager::NetworkPort::Dto.new(hash)
+      collection << dto
+    end
+    @data[:network_ports] = collection
   end
 
   def get_ec2_floating_ips_and_ports
@@ -408,29 +415,33 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
     return uid, new_result
   end
 
-  def parse_cloud_subnet_network_port(cloud_subnet_network_port, subnet_id)
-    {
+  def parse_cloud_subnet_network_port(network_port_id, subnet_id, cloud_subnet_network_port)
+    hash = {
       :address      => cloud_subnet_network_port.private_ip_address,
-      :cloud_subnet => @data_index.fetch_path(:cloud_subnets, subnet_id)
+      # :cloud_subnet => @data_index.fetch_path(:cloud_subnets, subnet_id)
+      :cloud_subnet => @data[:cloud_subnets].lazy_find(subnet_id),
+      :network_port => @data[:network_ports].lazy_find(network_port_id)
     }
+    CloudSubnetNetworkPort::Dto.new(hash)
   end
 
   def parse_network_port(network_port)
+    dto = NetworkPort::Dto
     uid                        = network_port.network_interface_id
     # TODO(lsmola) AWS can have secondary private IP address assigned to the ENI, our current model does not allow that.
     # Probably the best fix is, to expand unique index of the cloud_subnet_network_ports to include address. Also we
     # need to expand our tests to include the secondary fixed IP. Then we can remove the .slice(0..0)
-    cloud_subnet_network_ports = network_port.private_ip_addresses.slice(0..0).map do |x|
-      parse_cloud_subnet_network_port(x, network_port.subnet_id)
+    network_port.private_ip_addresses.slice(0..0).map do |x|
+      @data[:cloud_subnet_network_ports] << parse_cloud_subnet_network_port(uid, network_port.subnet_id, x)
     end
+    # dto.cloud_subnet_network_ports = @data[:cloud_subnet_network_ports].lazy_find(dto)
+    # cloud_subnet_network_ports = CloudSubnetNetworkPort::DtoCollection.new
     device                     = parent_manager_fetch_path(:vms, network_port.try(:attachment).try(:instance_id))
     security_groups            = network_port.groups.blank? ? [] : network_port.groups.map do |x|
       @data_index.fetch_path(:security_groups, x.group_id)
     end
 
-    dto[self.class.security_group_type::DtoCollection].fetch_patch(x.group_id)
-
-    [dto1, dto5, dto7]
+    # dto[self.class.security_group_type::DtoCollection].fetch_patch(x.group_id)
 
     new_result = {
       :type                       => self.class.network_port_type,
@@ -441,7 +452,7 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParser
       :device_owner               => network_port.try(:attachment).try(:instance_owner_id),
       :device_ref                 => network_port.try(:attachment).try(:instance_id),
       :device                     => device,
-      :cloud_subnet_network_ports => cloud_subnet_network_ports,
+      # :cloud_subnet_network_ports => cloud_subnet_network_ports,
       :security_groups            => security_groups,
     }
     return uid, new_result
