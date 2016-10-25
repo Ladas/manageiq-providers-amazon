@@ -29,7 +29,7 @@ describe ManageIQ::Providers::Amazon::NetworkManager::Refresher do
       end
     end
 
-    [5].each do |data_scaling|
+    [1].each do |data_scaling|
       context "with data scaled for #{data_scaling}" do
         let(:data_scaling) { data_scaling }
 

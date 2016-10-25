@@ -1,4 +1,4 @@
-class ManageIQ::Providers::Amazon::NetworkManager::RefreshParserDto
+class ManageIQ::Providers::Amazon::NetworkManager::RefreshParserDto < ManagerRefresh::RefreshParserDto
   include ManageIQ::Providers::Amazon::RefreshHelperMethods
 
   def initialize(ems, options = nil)
@@ -11,19 +11,61 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParserDto
     initialize_dto_collections
   end
 
-  def add_dto_collection(model_class, association, manager_ref = nil)
-    @data[association] = ::ManagerRefresh::DtoCollection.new(model_class,
-                                                             :parent      => @ems,
-                                                             :association => association,
-                                                             :manager_ref => manager_ref)
+  remote :cloud_subnets do |r|
+    r.parse :parse_cloud_subnet, :into => :cloud_subnets
   end
 
-  def add_cloud_manager_db_cached_dto(model_class, association, manager_ref = nil)
-    @data[association] = ::ManagerRefresh::DtoCollection.new(model_class,
-                                                             :parent      => @ems.parent_manager,
-                                                             :association => association,
-                                                             :manager_ref => manager_ref,
-                                                             :strategy    => :local_db_cache_all)
+  remote :network_ports do |r|
+    r.parse :parse_network_ports, :into => :network_ports, :produces => :cloud_subnet_network_ports
+  end
+
+  remote :security_groups do |r|
+    r.parse :parse_security_groups, :into => :security_groups
+  end
+
+  remote :firewall_rules_egress do |r|
+    r.depends_on :security_groups
+    r.parse :parse_firewall_rule, :with => ["egress"], :into => :firewall_rules
+  end
+
+  remote :firewall_rules_ingress do |r|
+    r.depends_on :security_groups
+    r.parse :parse_firewall_rule, :with => ["ingress"], :into => :firewall_rules
+  end
+
+  remote :ec2_instances do |r|
+    r.parse :parse_network_port_inferred_from_instance, :into => :network_ports
+    r.parse :parse_floating_ip_inferred_from_instance, :into => :floating_ips
+  end
+
+  node :availability_zones, :strategy => :local_db_cache_all
+  node :orchestration_stacks, :strategy => :local_db_cache_all
+
+  node :cloud_subnets do |n|
+    n.depends_on :cloud_networks
+    n.except_attributes :parent_cloud_subnet
+  end
+
+  # manually resolving simple cycle in data, I want this to be done automatically though
+  node :cloud_subnets_relationships, :klass => ManageIQ::Providers::Amazon::CloudManager::CloudSubnet do |n|
+    n.depends_on :cloud_subnets
+    n.only_attributes :parent_cloud_subnet
+  end
+
+  node :cloud_networks
+
+  node :cloud_subnet_network_ports, :klass => CloudSubnetNetworkPort do |n|
+    n.depends_on :cloud_subnets, :network_ports
+    n.manager_ref :address, :cloud_subnet, :network_port
+  end
+
+  node :security_groups do |n|
+    n.depends_on :cloud_networks, :orchestration_stacks
+  end
+
+  node :firewall_rules do |n|
+    n.depends_on :security_groups
+    n.manager_ref :resource, :source_security_group, :direction, :host_protocol, :port, :end_port, :source_ip_range
   end
 
   def initialize_dto_collections
@@ -188,16 +230,6 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParserDto
       end
     end
     process_dto_collection(public_ips, :floating_ips) { |public_ip| parse_public_ip(public_ip) }
-  end
-
-  def process_dto_collection(collection, key)
-    collection.each do |item|
-      uid, new_result = yield(item)
-      next if uid.nil?
-
-      dto = @data[key].new_dto(new_result)
-      @data[key] << dto
-    end
   end
 
   def get_network_ports
