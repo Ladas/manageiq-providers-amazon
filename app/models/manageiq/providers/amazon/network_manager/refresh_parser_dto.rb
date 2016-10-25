@@ -1,29 +1,11 @@
-class ManageIQ::Providers::Amazon::NetworkManager::RefreshParserDto
-  include ManageIQ::Providers::Amazon::RefreshHelperMethods
-
+class ManageIQ::Providers::Amazon::NetworkManager::RefreshParserDto < ::ManagerRefresh::RefreshParserDto
   def initialize(ems, options = nil)
-    @ems        = ems
+    super
+
     @aws_ec2    = ems.connect
     @aws_elb    = ems.connect(:service => :ElasticLoadBalancing)
-    @data       = {:_dto_collection => true}
-    @data_index = {}
-    @options    = options || {}
+
     initialize_dto_collections
-  end
-
-  def add_dto_collection(model_class, association, manager_ref = nil)
-    @data[association] = ::ManagerRefresh::DtoCollection.new(model_class,
-                                                             :parent      => @ems,
-                                                             :association => association,
-                                                             :manager_ref => manager_ref)
-  end
-
-  def add_cloud_manager_db_cached_dto(model_class, association, manager_ref = nil)
-    @data[association] = ::ManagerRefresh::DtoCollection.new(model_class,
-                                                             :parent      => @ems.parent_manager,
-                                                             :association => association,
-                                                             :manager_ref => manager_ref,
-                                                             :strategy    => :local_db_cache_all)
   end
 
   def initialize_dto_collections
@@ -190,16 +172,6 @@ class ManageIQ::Providers::Amazon::NetworkManager::RefreshParserDto
       end
     end
     process_dto_collection(public_ips, :floating_ips) { |public_ip| parse_public_ip(public_ip) }
-  end
-
-  def process_dto_collection(collection, key)
-    collection.each do |item|
-      uid, new_result = yield(item)
-      next if uid.nil?
-
-      dto = @data[key].new_dto(new_result)
-      @data[key] << dto
-    end
   end
 
   def get_network_ports
