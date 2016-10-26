@@ -10,6 +10,16 @@ describe ManageIQ::Providers::Amazon::CloudManager::Refresher do
   end
 
   it "will perform a full refresh" do
+    settings = OpenStruct.new
+    settings.dto_batch_saving   = true
+    settings.dto_refresh        = true
+    settings.get_private_images = true
+    settings.get_shared_images  = true
+    settings.get_public_images  = false
+    
+    allow(Settings.ems_refresh).to receive(:ec2).and_return(settings)
+    allow(Settings.ems_refresh).to receive(:ec2_network).and_return({:dto_batch_saving => true, :dto_refresh => true})
+
     2.times do # Run twice to verify that a second run with existing data does not change anything
       @ems.reload
 

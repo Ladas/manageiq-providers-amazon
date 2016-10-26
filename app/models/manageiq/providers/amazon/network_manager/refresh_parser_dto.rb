@@ -1,4 +1,6 @@
 class ManageIQ::Providers::Amazon::NetworkManager::RefreshParserDto < ::ManagerRefresh::RefreshParserDto
+  include ManageIQ::Providers::Amazon::RefreshHelperMethods
+
   def initialize(ems, options = nil)
     super
 
