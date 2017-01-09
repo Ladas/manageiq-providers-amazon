@@ -1,5 +1,5 @@
-class ManageIQ::Providers::Amazon::Inventory::Targets::EventPayloadVm < ManageIQ::Providers::Amazon::Inventory::Targets
-  def initialize_inventory_collections
+class ManageIQ::Providers::Amazon::Inventory::Targets::Vm < ManageIQ::Providers::Amazon::Inventory::Targets
+  def initialize_inventory_collections(ems, target)
     instance_ems_ref = event_payload(target)["instance_id"]
 
     add_inventory_collection(
@@ -20,6 +20,6 @@ class ManageIQ::Providers::Amazon::Inventory::Targets::EventPayloadVm < ManageIQ
   end
 
   def instances
-    [event_payload(target)]
+    HashCollection.new(@aws_ec2.instances)
   end
 end
