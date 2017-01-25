@@ -1,13 +1,9 @@
 class ManageIQ::Providers::Amazon::Inventory::Targets::StorageManager::Ebs < ManageIQ::Providers::Amazon::Inventory::Targets
+  def initialize_collector
+    ManageIQ::Providers::Amazon::Inventory::Collectors::StorageManager::Ebs.new(ems, target)
+  end
+
   def initialize_inventory_collections
     add_inventory_collections(%i(cloud_volumes cloud_volume_snapshots))
-  end
-
-  def cloud_volumes
-    HashCollection.new(aws_ec2.client.describe_volumes[:volumes])
-  end
-
-  def cloud_volume_snapshots
-    HashCollection.new(aws_ec2.client.describe_snapshots(:owner_ids => [:self])[:snapshots])
   end
 end
