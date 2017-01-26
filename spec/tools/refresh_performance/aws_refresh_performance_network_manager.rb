@@ -1,3 +1,18 @@
+# Benchmarks using RSPEC for saving code of AWS NetworkManager
+# We should not go above these values(ouput of log/benchmark_results.csv):
+#
+# Name,Object Count,Scaling,Collect,Parse Targetted,Saving,Total
+# inventory_object_ems_scaled_1x - Creating data,94362,1,1.46,9.77,135.71,146.95
+# inventory_object_ems_scaled_1x - Updating data,94362,1,0.01,8.99,70.36,79.37
+# inventory_object_ems_scaled_1x - Deleting data,2,1,0.01,0.01,138.12,138.14
+# non_bached_inventory_object_ems_scaled_1x - Creating data,94362,1,0.02,8.84,128.55,137.41
+# non_bached_inventory_object_ems_scaled_1x - Updating data,94362,1,0.01,8.73,70.14,78.88
+# non_bached_inventory_object_ems_scaled_1x - Deleting data,2,1,0.01,0.01,147.73,147.75
+# non_inventory_object_ems_scaled_1x - Creating data,94362,1,0.0,14.54,471.91,486.45
+# non_inventory_object_ems_scaled_1x - Updating data,94362,1,0.0,16.01,380.11,396.12
+# non_inventory_object_ems_scaled_1x - Deleting data,2,1,0.0,0.01,224.83,224.84
+
+
 require_relative '../../models/manageiq/providers/amazon/aws_helper'
 require_relative '../../models/manageiq/providers/amazon/aws_stubs'
 
@@ -22,7 +37,7 @@ describe ManageIQ::Providers::Amazon::NetworkManager::Refresher do
     end
 
     before(:all) do
-      output = ["Name", "Object Count", "Scaling", "Collect", "Parse Legacy", "Parse Targetted", "Saving", "Total"]
+      output = ["Name", "Object Count", "Scaling", "Collect", "Parse Targetted", "Saving", "Total"]
 
       open(Rails.root.join('log', 'benchmark_results.csv'), 'a') do |f|
         f.puts output.join(",")
@@ -42,8 +57,8 @@ describe ManageIQ::Providers::Amazon::NetworkManager::Refresher do
           end
         end
 
-        context "with non batched inventory_object" do
-          let(:ems_name) { "non_bached_inventory_object_ems_scaled_#{data_scaling}x" }
+        context "with recursive_saving_ inventory_object" do
+          let(:ems_name) { "recursive_saving__inventory_object_ems_scaled_#{data_scaling}x" }
 
           it "will perform a full refresh" do
             allow(Settings.ems_refresh).to receive(:ec2_network).and_return({:inventory_object_saving_strategy => :recursive,
@@ -121,7 +136,6 @@ describe ManageIQ::Providers::Amazon::NetworkManager::Refresher do
 
     # Get also a chart displayable format
     matched = detected.match(/:collect_inventory_for_targets=>([\d\.e-]+).*?
-                              :parse_legacy_inventory=>([\d\.e-]+).*?
                               :parse_targeted_inventory=>([\d\.e-]+).*?
                               :save_inventory=>([\d\.e-]+).*?
                               :ems_refresh=>([\d\.e-]+).*?/x)
@@ -129,7 +143,7 @@ describe ManageIQ::Providers::Amazon::NetworkManager::Refresher do
     output << "#{ems_name} - #{subname}"
     output << expected_table_counts.values.sum
     output << scaling
-    output += matched[1..5].map { |x| x.to_f.round(2) }
+    output += matched[1..4].map { |x| x.to_f.round(2) }
     open(Rails.root.join('log', 'benchmark_results.csv'), 'a') do |f|
       f.puts output.join(",")
     end

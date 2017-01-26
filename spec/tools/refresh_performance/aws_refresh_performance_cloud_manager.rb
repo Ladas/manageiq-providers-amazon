@@ -1,3 +1,19 @@
+# Benchmarks using RSPEC for saving code of AWS CloudManager
+# We should not go above these values(ouput of log/benchmark_results.csv):
+#
+# Inventory object refresh is about 20% faster
+#
+# Name,Object Count,Scaling,Collect,Parse Targetted,Saving,Total
+# non_inventory_object_ems_scaled_1x - Creating data,215063,1,0.0,21.6,917.18,938.78
+# non_inventory_object_ems_scaled_1x - Updating data,215063,1,0.0,24.07,921.87,945.94
+# non_inventory_object_ems_scaled_1x - Deleting data,150063,1,0.0,0.02,982.88,982.91
+# non_bached_inventory_object_ems_scaled_1x - Creating data,215064,1,0.01,26.94,760.25,787.21
+# non_bached_inventory_object_ems_scaled_1x - Updating data,215064,1,0.0,26.27,688.45,714.73
+# non_bached_inventory_object_ems_scaled_1x - Deleting data,150064,1,0.0,0.02,808.68,808.71
+# inventory_object_ems_scaled_1x - Creating data,215064,1,0.0,27.67,738.32,765.99
+# inventory_object_ems_scaled_1x - Updating data,215064,1,0.0,26.91,712.43,739.34
+# inventory_object_ems_scaled_1x - Deleting data,150064,1,0.0,0.02,823.98,824.0
+
 require_relative '../../models/manageiq/providers/amazon/aws_helper'
 require_relative '../../models/manageiq/providers/amazon/aws_stubs'
 
@@ -22,7 +38,7 @@ describe ManageIQ::Providers::Amazon::CloudManager::Refresher do
     end
 
     before(:all) do
-      output = ["Name", "Object Count", "Scaling", "Collect", "Parse Legacy", "Parse Targetted", "Saving", "Total"]
+      output = ["Name", "Object Count", "Scaling", "Collect", "Parse Targetted", "Saving", "Total"]
 
       open(Rails.root.join('log', 'benchmark_results.csv'), 'a') do |f|
         f.puts output.join(",")
@@ -50,41 +66,41 @@ describe ManageIQ::Providers::Amazon::CloudManager::Refresher do
           end
         end
 
-        context "with recursive saving inventory_object" do
-          let(:ems_name) { "non_bached_inventory_object_ems_scaled_#{data_scaling}x" }
-
-          it "will perform a full refresh" do
-            @inventory_object_settings                = {:inventory_object_saving_strategy => :recursive, :inventory_object_refresh => true}
-            settings                                  = OpenStruct.new
-            settings.inventory_object_refresh         = @inventory_object_settings[:inventory_object_refresh]
-            settings.inventory_object_saving_strategy = @inventory_object_settings[:inventory_object_saving_strategy]
-            settings.get_private_images               = true
-            settings.get_shared_images                = false
-            settings.get_public_images                = false
-
-            allow(Settings.ems_refresh).to receive(:ec2).and_return(settings)
-
-            refresh
-          end
-        end
-
-        context "with non inventory_object" do
-          let(:ems_name) { "non_inventory_object_ems_scaled_#{data_scaling}x" }
-
-          it "will perform a full refresh" do
-            @inventory_object_settings                = {:inventory_object_refresh => false}
-            settings                                  = OpenStruct.new
-            settings.inventory_object_refresh         = @inventory_object_settings[:inventory_object_refresh]
-            settings.inventory_object_saving_strategy = @inventory_object_settings[:inventory_object_saving_strategy]
-            settings.get_private_images               = true
-            settings.get_shared_images                = false
-            settings.get_public_images                = false
-
-            allow(Settings.ems_refresh).to receive(:ec2).and_return(settings)
-
-            refresh
-          end
-        end
+        # context "with recursive saving inventory_object" do
+        #   let(:ems_name) { "recursive_saving_inventory_object_ems_scaled_#{data_scaling}x" }
+        #
+        #   it "will perform a full refresh" do
+        #     @inventory_object_settings                = {:inventory_object_saving_strategy => :recursive, :inventory_object_refresh => true}
+        #     settings                                  = OpenStruct.new
+        #     settings.inventory_object_refresh         = @inventory_object_settings[:inventory_object_refresh]
+        #     settings.inventory_object_saving_strategy = @inventory_object_settings[:inventory_object_saving_strategy]
+        #     settings.get_private_images               = true
+        #     settings.get_shared_images                = false
+        #     settings.get_public_images                = false
+        #
+        #     allow(Settings.ems_refresh).to receive(:ec2).and_return(settings)
+        #
+        #     refresh
+        #   end
+        # end
+        #
+        # context "with non inventory_object" do
+        #   let(:ems_name) { "non_inventory_object_ems_scaled_#{data_scaling}x" }
+        #
+        #   it "will perform a full refresh" do
+        #     @inventory_object_settings                = {:inventory_object_refresh => false}
+        #     settings                                  = OpenStruct.new
+        #     settings.inventory_object_refresh         = @inventory_object_settings[:inventory_object_refresh]
+        #     settings.inventory_object_saving_strategy = @inventory_object_settings[:inventory_object_saving_strategy]
+        #     settings.get_private_images               = true
+        #     settings.get_shared_images                = false
+        #     settings.get_public_images                = false
+        #
+        #     allow(Settings.ems_refresh).to receive(:ec2).and_return(settings)
+        #
+        #     refresh
+        #   end
+        # end
       end
     end
   end
@@ -150,7 +166,6 @@ describe ManageIQ::Providers::Amazon::CloudManager::Refresher do
 
     # Get also a chart displayable format
     matched = detected.match(/:collect_inventory_for_targets=>([\d\.e-]+).*?
-                              :parse_legacy_inventory=>([\d\.e-]+).*?
                               :parse_targeted_inventory=>([\d\.e-]+).*?
                               :save_inventory=>([\d\.e-]+).*?
                               :ems_refresh=>([\d\.e-]+).*?/x)
@@ -158,7 +173,7 @@ describe ManageIQ::Providers::Amazon::CloudManager::Refresher do
     output << "#{ems_name} - #{subname}"
     output << expected_table_counts.values.sum
     output << scaling
-    output += matched[1..5].map { |x| x.to_f.round(2) }
+    output += matched[1..4].map { |x| x.to_f.round(2) }
     open(Rails.root.join('log', 'benchmark_results.csv'), 'a') do |f|
       f.puts output.join(",")
     end
@@ -193,7 +208,7 @@ describe ManageIQ::Providers::Amazon::CloudManager::Refresher do
 
     {
       :auth_private_key                  => test_counts[:key_pair_count],
-      :ext_management_system             => 2,
+      :ext_management_system             => 4,
       # TODO(lsmola) collect all flavors for original refresh
       :flavor                            => @inventory_object_settings[:inventory_object_refresh] ? 57 : 56,
       :availability_zone                 => 5,
@@ -209,7 +224,7 @@ describe ManageIQ::Providers::Amazon::CloudManager::Refresher do
       :system_service                    => 0,
       # :relationship                      => vm_count_plus_disconnect_inv + image_count_plus_disconnect_inv,
       # :miq_queue                         => 2,
-      :orchestration_template            => 1,
+      # :orchestration_template            => 1,
       :orchestration_stack               => test_counts[:stack_count],
       :orchestration_stack_parameter     => test_counts[:stack_count] * test_counts[:stack_parameter_count],
       :orchestration_stack_output        => test_counts[:stack_count] * test_counts[:stack_output_count],
@@ -251,7 +266,7 @@ describe ManageIQ::Providers::Amazon::CloudManager::Refresher do
       :system_service                    => SystemService.count,
       # :relationship                      => Relationship.count,
       # :miq_queue                         => MiqQueue.count,
-      :orchestration_template            => OrchestrationTemplate.count,
+      # :orchestration_template            => OrchestrationTemplate.count,
       :orchestration_stack               => OrchestrationStack.count,
       :orchestration_stack_parameter     => OrchestrationStackParameter.count,
       :orchestration_stack_output        => OrchestrationStackOutput.count,
