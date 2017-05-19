@@ -12,7 +12,7 @@ class ManageIQ::Providers::Amazon::Inventory::Persister::CloudManager < ManageIQ
         :dependency_attributes => {
           :vms           => [collections[:vms]],
           :miq_templates => [collections[:miq_templates]]
-        }
+        },
       )
     )
 
