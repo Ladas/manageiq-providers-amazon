@@ -1,0 +1,10 @@
+{:count=>105, :heap_allocated_pages=>21779, :heap_sorted_length=>21889, :heap_allocatable_pages=>11,
+ :heap_available_slots=>8877079, :heap_live_slots=>2571922, :heap_free_slots=>6305157, :heap_final_slots=>0,
+ :heap_marked_slots=>2570778, :heap_swept_slots=>6306304, :heap_eden_pages=>21768, :heap_tomb_pages=>11,
+ :total_allocated_pages=>22130, :total_freed_pages=>351, :total_allocated_objects=>77197636,
+ :total_freed_objects=>74625714, :malloc_increase_bytes=>50408, :malloc_increase_bytes_limit=>32883343,
+ :minor_gc_count=>79, :major_gc_count=>26, :remembered_wb_unprotected_objects=>35107,
+ :remembered_wb_unprotected_objects_limit=>70214, :old_objects=>2508767, :old_objects_limit=>5017534,
+ :oldmalloc_increase_bytes=>50856, :oldmalloc_increase_bytes_limit=>134217728}
+
+

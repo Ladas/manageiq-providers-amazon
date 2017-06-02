@@ -4,7 +4,7 @@ class ManageIQ::Providers::Amazon::Inventory::Persister::TargetCollection < Mana
     # Top level models with direct references for Cloud
     add_inventory_collections_with_references(
       cloud,
-      %i(vms miq_templates availability_zones orchestration_stacks)
+      %i(vms miq_templates flavors availability_zones orchestration_stacks)
     )
 
     add_inventory_collection_with_references(
@@ -18,8 +18,9 @@ class ManageIQ::Providers::Amazon::Inventory::Persister::TargetCollection < Mana
       cloud,
       %i(hardwares networks disks vm_and_template_labels orchestration_stacks_resources orchestration_stacks_outputs
          orchestration_stacks_parameters),
-      :strategy => strategy,
-      :targeted => true
+      :strategy       => strategy,
+      :targeted       => true,
+      :saver_strategy => saver_strategy,
     )
 
     add_inventory_collection(cloud.orchestration_templates)
@@ -52,9 +53,10 @@ class ManageIQ::Providers::Amazon::Inventory::Persister::TargetCollection < Mana
       %i(firewall_rules cloud_subnet_network_ports load_balancer_pools load_balancer_pool_members
          load_balancer_pool_member_pools load_balancer_listeners load_balancer_listener_pools
          load_balancer_health_checks load_balancer_health_check_members),
-      :strategy => strategy,
-      :targeted => true,
-      :parent   => manager.network_manager
+      :strategy       => strategy,
+      :targeted       => true,
+      :saver_strategy => saver_strategy,
+      :parent         => manager.network_manager
     )
 
     ######### Storage ##############
@@ -73,14 +75,7 @@ class ManageIQ::Providers::Amazon::Inventory::Persister::TargetCollection < Mana
       )
     end
 
-    # Model we take just from a DB, there is no flavors API
-    add_inventory_collections(
-      cloud,
-      %i(flavors),
-      :strategy => :local_db_find_references
-    )
-
-    ######## Custom processing of Ancestry ##########
+    ####### Custom processing of Ancestry ##########
     add_inventory_collection(
       cloud.vm_and_miq_template_ancestry(
         :dependency_attributes => {
@@ -111,9 +106,10 @@ class ManageIQ::Providers::Amazon::Inventory::Persister::TargetCollection < Mana
   def add_inventory_collection_with_references(inventory_collections_data, name, manager_refs, options = {})
     options = inventory_collections_data.send(
       name,
-      :manager_uuids => manager_refs,
-      :strategy      => strategy,
-      :targeted      => true
+      :manager_uuids  => manager_refs,
+      :strategy       => strategy,
+      :targeted       => true,
+      :saver_strategy => saver_strategy,
     ).merge(options)
 
     add_inventory_collection(options)
@@ -121,6 +117,10 @@ class ManageIQ::Providers::Amazon::Inventory::Persister::TargetCollection < Mana
 
   def strategy
     :local_db_find_missing_references
+  end
+
+  def saver_strategy
+    :default
   end
 
   def references(collection)
