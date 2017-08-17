@@ -181,13 +181,15 @@ class ManageIQ::Providers::Amazon::Inventory::Parser::CloudManager < ManageIQ::P
         :flavor              => flavor,
         :genealogy_parent    => persister.miq_templates.lazy_find(instance['image_id']),
         :key_pairs           => [persister.key_pairs.lazy_find(instance['key_name'])].compact,
-        :location            => persister.networks.lazy_find("#{uid}__public", :key => :hostname, :default => 'unknown'),
         :orchestration_stack => persister.orchestration_stacks.lazy_find(
           get_from_tags(instance, "aws:cloudformation:stack-id")
         ),
       )
 
-      instance_hardware(persister_instance, instance, flavor)
+      persister_hardware = instance_hardware(persister_instance, instance, flavor)
+
+      persister_instance.location = persister.networks.lazy_find_by({:hardware => persister_hardware, :description => "public"}, :key => :hostname, :default => 'unknown')
+
       vm_and_template_labels(persister_instance, instance["tags"] || [])
     end
   end
@@ -202,11 +204,13 @@ class ManageIQ::Providers::Amazon::Inventory::Parser::CloudManager < ManageIQ::P
       :cpu_total_cores      => flavor[:cpus],
       :memory_mb            => flavor[:memory] / 1.megabyte,
       :disk_capacity        => flavor[:ephemeral_disk_size],
-      :guest_os             => persister.hardwares.lazy_find(instance['image_id'], :key => :guest_os),
+      :guest_os             => persister.hardwares.lazy_find({:vm_or_template => {:ems_ref => instance['image_id']}}, :key => :guest_os),
     )
 
     hardware_networks(persister_hardware, instance)
     hardware_disks(persister_hardware, instance, flavor)
+
+    persister_hardware
   end
 
   def hardware_networks(persister_hardware, instance)

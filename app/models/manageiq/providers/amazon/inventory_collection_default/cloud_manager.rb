@@ -157,7 +157,7 @@ class ManageIQ::Providers::Amazon::InventoryCollectionDefault::CloudManager < Ma
       }
 
       attributes[:targeted_arel] = lambda do |inventory_collection|
-        manager_uuids = inventory_collection.parent_inventory_collections.collect(&:manager_uuids).map(&:to_a).flatten
+        manager_uuids = inventory_collection.parent_inventory_collections.flat_map { |c| c.manager_uuids.map { |x| x[:ems_ref] }}
         inventory_collection.parent.vm_and_template_labels.where(
           'vms' => {:ems_ref => manager_uuids}
         )

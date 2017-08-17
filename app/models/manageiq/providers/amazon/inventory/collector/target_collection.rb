@@ -9,11 +9,11 @@ class ManageIQ::Providers::Amazon::Inventory::Collector::TargetCollection < Mana
   end
 
   def references(collection)
-    target.manager_refs_by_association.try(:[], collection).try(:[], :ems_ref).try(:to_a) || []
+    (target.manager_refs_by_association.try(:[], collection) || []).map { |x| x[:ems_ref] }.uniq
   end
 
   def name_references(collection)
-    target.manager_refs_by_association.try(:[], collection).try(:[], :name).try(:to_a) || []
+    (target.manager_refs_by_association.try(:[], collection) || []).map { |x| x[:name] }.uniq
   end
 
   def instances

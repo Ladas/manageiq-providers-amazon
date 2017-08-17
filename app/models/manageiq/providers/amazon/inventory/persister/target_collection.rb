@@ -122,11 +122,11 @@ class ManageIQ::Providers::Amazon::Inventory::Persister::TargetCollection < Mana
   end
 
   def references(collection)
-    target.manager_refs_by_association.try(:[], collection).try(:[], :ems_ref).try(:to_a) || []
+    target.manager_refs_by_association.try(:[], collection) || []
   end
 
   def name_references(collection)
-    target.manager_refs_by_association.try(:[], collection).try(:[], :name).try(:to_a) || []
+    target.manager_refs_by_association.try(:[], collection) || []
   end
 
   def cloud

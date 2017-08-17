@@ -215,7 +215,7 @@ class ManageIQ::Providers::Amazon::Inventory::Parser::NetworkManager < ManageIQ:
       # TODO(lsmola) find a nicer way to do the find only in the data_index. The find method can go into the DB with
       # some strategies, which is not wanted here. We need to separate find used for crosslinks and find used for saving
       # of the data.
-      next if !cloud_network_only && ip['instance_id'] && persister.floating_ips.data_index[uid]
+      next if !cloud_network_only && ip['instance_id'] && persister.floating_ips.data_index[{:ems_ref => uid}]
 
       persister.floating_ips.find_or_build(uid).assign_attributes(
         :address            => address,
