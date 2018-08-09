@@ -92,7 +92,7 @@ describe ManageIQ::Providers::Amazon::CloudManager::Refresher do
       end
 
       it "checks the full row saving with increasing timestamps forcing upsert" do
-        allow(@ems).to receive(:vms) { Vm.none }
+        allow_any_instance_of(@ems.class).to receive(:vms).and_return(Vm.none)
 
         bigger_newest_timestamp = newest_timestamp
 
@@ -378,11 +378,82 @@ describe ManageIQ::Providers::Amazon::CloudManager::Refresher do
               :timestamp => bigger_newest_timestamp,
             )
           )
+        end
 
-          # Expect the second+ run with same timestamp for each record doesn't change rails timestamps (the row should
-          # not be updated)
-          vm_created_on = Vm.where(:uid_ems => "1").first.created_on
-          vm_updated_on = Vm.where(:uid_ems => "1").first.updated_on
+        2.times do
+          persister = CollectorTest.generate_batches_of_full_vm_data(
+            :ems_name    => @ems.name,
+            :timestamp   => newest_timestamp,
+            :index_start => 0,
+            :batch_size  => 2
+          )
+
+          CollectorTest.generate_batches_of_full_vm_data(
+            :ems_name    => @ems.name,
+            :timestamp   => even_bigger_newest_timestamp,
+            :persister   => persister,
+            :index_start => 1,
+            :batch_size  => 2
+          )
+
+          CollectorTest.refresh(persister)
+
+          Vm.find_each do |vm|
+            expected_timestamp             = expected_timestamp(vm, newest_timestamp)
+            expected_bigger_timestamp      = expected_timestamp(vm, bigger_newest_timestamp)
+            expected_even_bigger_timestamp = expected_timestamp(vm, even_bigger_newest_timestamp)
+
+            if index(vm) >= 2
+              # This gets full row update
+              expect(vm).to(
+                have_attributes(
+                  :name => "instance_#{expected_even_bigger_timestamp}",
+                  # TODO(lsmola) so this means we do full by partial, so it should be 'expected_timestamp', how to do it?
+                  # It should also flip complete => true
+                  :timestamp       => expected_even_bigger_timestamp,
+                  :timestamps_max  => nil,
+                  :timestamps      => {},
+                  :boot_time       => expected_even_bigger_timestamp,
+                  :raw_power_state => "#{expected_even_bigger_timestamp} status",
+                  :complete        => true,
+                )
+              )
+            else
+              # This gets full row, transformed to skeletal update, leading to only updating :name
+              expect(vm).to(
+                have_attributes(
+                  :name => "instance_#{expected_timestamp}",
+                  # TODO(lsmola) so this means we do full by partial, so it should be 'expected_timestamp', how to do it?
+                  # It should also flip complete => true
+                  :timestamp       => nil,
+                  :timestamps_max  => expected_bigger_timestamp,
+                  :boot_time       => expected_bigger_timestamp,
+                  :raw_power_state => "#{expected_bigger_timestamp} status",
+                  :complete        => true,
+                )
+              )
+
+              expect(time_parse(vm.timestamps["raw_power_state"])).to eq expected_bigger_timestamp
+              expect(time_parse(vm.timestamps["uid_ems"])).to eq expected_bigger_timestamp
+              expect(time_parse(vm.timestamps["boot_time"])).to eq expected_bigger_timestamp
+            end
+          end
+        end
+      end
+
+      it "checks that full refresh with lower timestamp running after partial, will turn to partial updates, forcing upsert" do
+        allow_any_instance_of(@ems.class).to receive(:vms).and_return(Vm.none)
+
+        bigger_newest_timestamp      = newest_timestamp + 1.second
+        even_bigger_newest_timestamp = newest_timestamp + 2.second
+
+        2.times do
+          CollectorTest.refresh(
+            CollectorTest.generate_batches_of_partial_vm_data(
+              :ems_name  => @ems.name,
+              :timestamp => bigger_newest_timestamp,
+            )
+          )
         end
 
         2.times do
