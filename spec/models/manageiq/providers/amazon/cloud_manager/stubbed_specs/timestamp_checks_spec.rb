@@ -560,12 +560,7 @@ describe ManageIQ::Providers::Amazon::CloudManager::Refresher do
               )
             )
 
-            # TODO(lsmola) wrong, this should be expected_timestamp, we need to set the right timestamps on parsing time
-            if index(vm) >= 2
-              expect(time_parse(vm.timestamps["raw_power_state"])).to eq expected_bigger_timestamp
-            else
-              expect(time_parse(vm.timestamps["raw_power_state"])).to eq expected_timestamp
-            end
+            expect(time_parse(vm.timestamps["raw_power_state"])).to eq expected_timestamp
             expect(time_parse(vm.timestamps["uid_ems"])).to eq expected_bigger_timestamp
             expect(time_parse(vm.timestamps["boot_time"])).to eq expected_bigger_timestamp
           end
@@ -573,18 +568,102 @@ describe ManageIQ::Providers::Amazon::CloudManager::Refresher do
       end
 
       it "checks that 2 different partial records are batched and saved correctly when starting with newer" do
-        pending("If doing partial build of the same record multiple times, we need to check timestamps per column")
-        # TODO(lsmola) the asserts are not correct
+        bigger_newest_timestamp = newest_timestamp + 1.second
 
+
+        persister = CollectorTest.generate_batches_of_partial_vm_data(
+          :ems_name  => @ems.name,
+          :timestamp => bigger_newest_timestamp,
+        )
+
+        CollectorTest.generate_batches_of_different_partial_vm_data(
+          :ems_name    => @ems.name,
+          :timestamp   => newest_timestamp,
+          :persister   => persister,
+          :index_start => 1,
+          :batch_size  => 2
+        )
+
+        CollectorTest.refresh(persister)
+
+        Vm.find_each do |vm|
+          expected_timestamp        = expected_timestamp(vm, newest_timestamp)
+          expected_bigger_timestamp = expected_timestamp(vm, bigger_newest_timestamp)
+          expect(vm).to(
+            have_attributes(
+              :name            => nil,
+              :timestamp       => nil,
+              :timestamps_max  => expected_bigger_timestamp,
+              :boot_time       => expected_bigger_timestamp,
+              :raw_power_state => "#{expected_bigger_timestamp} status",
+              :complete        => true, # TODO should be false
+            )
+          )
+
+          if index(vm) >= 2
+            # version is only set for vms >= 2
+            expect(vm).to(
+              have_attributes(
+                :version => expected_timestamp,
+              )
+            )
+            expect(time_parse(vm.timestamps["version"])).to eq expected_timestamp
+          else
+            expect(vm).to(
+              have_attributes(
+                :version => nil,
+              )
+            )
+            expect(vm.timestamps["version"]).to eq nil
+          end
+          expect(time_parse(vm.timestamps["raw_power_state"])).to eq expected_bigger_timestamp
+          expect(time_parse(vm.timestamps["uid_ems"])).to eq expected_bigger_timestamp
+          expect(time_parse(vm.timestamps["boot_time"])).to eq expected_bigger_timestamp
+        end
+
+        CollectorTest.refresh(
+          CollectorTest.generate_batches_of_different_partial_vm_data(
+            :ems_name    => @ems.name,
+            :timestamp   => newest_timestamp,
+            :index_start => 0,
+            :batch_size  => 2
+          )
+        )
+
+        Vm.find_each do |vm|
+          expected_timestamp        = expected_timestamp(vm, newest_timestamp)
+          expected_bigger_timestamp = expected_timestamp(vm, bigger_newest_timestamp)
+          expect(vm).to(
+            have_attributes(
+              :name            => nil,
+              :timestamp       => nil,
+              :timestamps_max  => expected_bigger_timestamp,
+              :boot_time       => expected_bigger_timestamp,
+              :raw_power_state => "#{expected_bigger_timestamp} status",
+              :version         => expected_timestamp,
+              :complete        => true, # TODO should be false
+            )
+          )
+
+          # TODO(lsmola) wrong, this should be expected_timestamp, we need to set the right timestamps on parsing time
+          expect(time_parse(vm.timestamps["raw_power_state"])).to eq expected_bigger_timestamp
+          expect(time_parse(vm.timestamps["uid_ems"])).to eq expected_bigger_timestamp
+          expect(time_parse(vm.timestamps["boot_time"])).to eq expected_bigger_timestamp
+          expect(time_parse(vm.timestamps["version"])).to eq expected_timestamp
+        end
+      end
+
+
+      it "checks that 2 different full rows are saved corerctly when starting with newer" do
         bigger_newest_timestamp = newest_timestamp + 1.second
 
         2.times do
-          persister = CollectorTest.generate_batches_of_partial_vm_data(
+          persister = CollectorTest.generate_batches_of_full_vm_data(
             :ems_name  => @ems.name,
             :timestamp => bigger_newest_timestamp,
           )
 
-          CollectorTest.generate_batches_of_different_partial_vm_data(
+          CollectorTest.generate_batches_of_full_vm_data(
             :ems_name    => @ems.name,
             :timestamp   => newest_timestamp,
             :persister   => persister,
@@ -595,32 +674,23 @@ describe ManageIQ::Providers::Amazon::CloudManager::Refresher do
           CollectorTest.refresh(persister)
 
           Vm.find_each do |vm|
-            expected_timestamp        = expected_timestamp(vm, newest_timestamp)
             expected_bigger_timestamp = expected_timestamp(vm, bigger_newest_timestamp)
             expect(vm).to(
               have_attributes(
-                :name            => nil,
-                :timestamp       => nil,
+                :name            => "instance_#{expected_bigger_timestamp}",
+                :timestamp       => expected_bigger_timestamp,
+                :timestamps      => {},
+                :timestamps_max  => nil,
                 :version         => expected_bigger_timestamp,
-                :timestamps_max  => expected_bigger_timestamp,
                 :boot_time       => expected_bigger_timestamp,
-                :raw_power_state => "#{expected_timestamp} status",
-                :complete        => true, # TODO should be false
+                :raw_power_state => "#{expected_bigger_timestamp} status",
+                :complete        => true,
               )
             )
-
-            # TODO(lsmola) wrong, this should be expected_timestamp, we need to set the right timestamps on parsing time
-            if index(vm) >= 2
-              expect(time_parse(vm.timestamps["raw_power_state"])).to eq expected_bigger_timestamp
-            else
-              expect(time_parse(vm.timestamps["raw_power_state"])).to eq expected_timestamp
-            end
-            expect(time_parse(vm.timestamps["uid_ems"])).to eq expected_bigger_timestamp
-            expect(time_parse(vm.timestamps["boot_time"])).to eq expected_bigger_timestamp
           end
 
           CollectorTest.refresh(
-            CollectorTest.generate_batches_of_different_partial_vm_data(
+            CollectorTest.generate_batches_of_full_vm_data(
               :ems_name    => @ems.name,
               :timestamp   => newest_timestamp,
               :index_start => 0,
@@ -629,28 +699,19 @@ describe ManageIQ::Providers::Amazon::CloudManager::Refresher do
           )
 
           Vm.find_each do |vm|
-            expected_timestamp        = expected_timestamp(vm, newest_timestamp)
             expected_bigger_timestamp = expected_timestamp(vm, bigger_newest_timestamp)
             expect(vm).to(
               have_attributes(
-                :name            => nil,
-                :timestamp       => nil,
+                :name            => "instance_#{expected_bigger_timestamp}",
+                :timestamp       => expected_bigger_timestamp,
+                :timestamps      => {},
+                :timestamps_max  => nil,
                 :version         => expected_bigger_timestamp,
-                :timestamps_max  => expected_bigger_timestamp,
                 :boot_time       => expected_bigger_timestamp,
-                :raw_power_state => "#{expected_timestamp} status",
-                :complete        => true, # TODO should be false
+                :raw_power_state => "#{expected_bigger_timestamp} status",
+                :complete        => true,
               )
             )
-
-            # TODO(lsmola) wrong, this should be expected_timestamp, we need to set the right timestamps on parsing time
-            if index(vm) >= 2
-              expect(time_parse(vm.timestamps["raw_power_state"])).to eq expected_bigger_timestamp
-            else
-              expect(time_parse(vm.timestamps["raw_power_state"])).to eq expected_timestamp
-            end
-            expect(time_parse(vm.timestamps["uid_ems"])).to eq expected_bigger_timestamp
-            expect(time_parse(vm.timestamps["boot_time"])).to eq expected_bigger_timestamp
           end
         end
       end
